@@ -244,5 +244,18 @@ class RenderContextTests(unittest.TestCase):
         self.assertIn("+3.0k gen", out)
 
 
+    def test_prefill_shows_fresh_rate_split(self):
+        prev = {"vllm:prefix_cache_queries_total": 0.0, "vllm:prefix_cache_hits_total": 0.0}
+        m = {"vllm:prefix_cache_queries_total": 1_000.0, "vllm:prefix_cache_hits_total": 990.0}
+        out = dash.render("http://lane", m, prev, 1.0, deque(), deque(), 0.0,
+                          dash.palette(False))
+        self.assertIn("fresh 10.0", out)  # 1000 - 990 tok/s of real compute
+
+    def test_prefill_split_hidden_without_cache_metrics(self):
+        out = dash.render("http://lane", {"vllm:num_requests_running": 1.0}, None, 1.0,
+                          deque(), deque(), 0.0, dash.palette(False))
+        self.assertNotIn("fresh", out)
+
+
 if __name__ == "__main__":
     unittest.main()

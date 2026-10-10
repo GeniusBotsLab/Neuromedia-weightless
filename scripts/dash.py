@@ -152,6 +152,8 @@ PROMPT_TOK = "vllm:prompt_tokens_total"
 GEN_TOK = "vllm:generation_tokens_total"
 DRAFT_TOK = "vllm:spec_decode_num_draft_tokens_total"
 ACC_TOK = "vllm:spec_decode_num_accepted_tokens_total"
+CACHE_Q = "vllm:prefix_cache_queries_total"
+CACHE_H = "vllm:prefix_cache_hits_total"
 
 
 class RateWindow:
@@ -223,6 +225,9 @@ def render(target: str, m: dict, prev: dict | None, dt: float,
         return w.rate() if w is not None else rate(name)
 
     pre, dec = stable(PROMPT_TOK), stable(GEN_TOK)
+    # prompt_tokens_total counts prefix-cache hits as prompt tokens; the
+    # fresh-compute rate is what the cache did NOT serve.
+    fresh_pre = max(0.0, stable(CACHE_Q) - stable(CACHE_H))
     hist_pre.append(pre)
     hist_dec.append(dec)
 
@@ -275,7 +280,9 @@ def render(target: str, m: dict, prev: dict | None, dt: float,
     L.append("")
     avg_pre = f"  {c['d']}avg {fmt_rate(avgs[0])}{c['r']}" if avgs else ""
     avg_dec = f"  {c['d']}avg {fmt_rate(avgs[1])}{c['r']}" if avgs else ""
-    L.append(f"  {c['cyan']}prefill{c['r']} {c['b']}{fmt_rate(pre):>7}{c['r']} tok/s{avg_pre}"
+    fresh = (f"  {c['d']}fresh {fmt_rate(fresh_pre)}{c['r']}"
+             if g(m, CACHE_Q) > 0 else "")
+    L.append(f"  {c['cyan']}prefill{c['r']} {c['b']}{fmt_rate(pre):>7}{c['r']} tok/s{avg_pre}{fresh}"
              f"  {c['cyan']}{spark(hist_pre, spark_w)}{c['r']}")
     L.append(f"  {c['pink']}decode {c['r']} {c['b']}{fmt_rate(dec):>7}{c['r']} tok/s{avg_dec}"
              f"  {c['pink']}{spark(hist_dec, spark_w)}{c['r']}")
@@ -345,7 +352,8 @@ def main(argv=None) -> int:
     c = palette(color)
 
     hist_pre, hist_dec = deque(maxlen=HIST), deque(maxlen=HIST)
-    wins = {name: RateWindow() for name in (PROMPT_TOK, GEN_TOK, DRAFT_TOK, ACC_TOK)}
+    wins = {name: RateWindow() for name in (PROMPT_TOK, GEN_TOK, DRAFT_TOK, ACC_TOK,
+                                            CACHE_Q, CACHE_H)}
     first, info, info_t = None, {}, 0.0
     prev, prev_t, t0 = None, 0.0, time.monotonic()
     while True:

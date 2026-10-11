@@ -272,5 +272,31 @@ class RenderContextTests(unittest.TestCase):
         self.assertNotIn("stream", out)
 
 
+    def test_lifecycle_line_shows_phase_means(self):
+        names = ["queue", "prefill", "decode"]
+        prev, m = {}, {}
+        for name in names:
+            prev[f"vllm:request_{name}_time_seconds_sum"] = 0.0
+            prev[f"vllm:request_{name}_time_seconds_count"] = 0.0
+        m["vllm:request_queue_time_seconds_sum"] = 20.0    # 2.0s per request
+        m["vllm:request_prefill_time_seconds_sum"] = 10.0  # 1.0s
+        m["vllm:request_decode_time_seconds_sum"] = 80.0   # 8.0s
+        for name in names:
+            m[f"vllm:request_{name}_time_seconds_count"] = 10.0
+        out = dash.render("http://lane", m, prev, 1.0, deque(), deque(), 0.0,
+                          dash.palette(False))
+        self.assertIn("queue 2.0s → prefill 1.0s → decode 8.0s", out)
+
+    def test_lifecycle_hidden_without_phase_metrics(self):
+        out = dash.render("http://lane", {"vllm:num_requests_running": 1.0}, None, 1.0,
+                          deque(), deque(), 0.0, dash.palette(False))
+        self.assertNotIn("lifecycle", out)
+
+    def test_busy_shown_on_requests_line(self):
+        out = dash.render("http://lane", {"vllm:num_requests_running": 3.0}, None, 1.0,
+                          deque(), deque(), 0.0, dash.palette(False), busy=0.42)
+        self.assertIn("engine busy 42%", out)
+
+
 if __name__ == "__main__":
     unittest.main()

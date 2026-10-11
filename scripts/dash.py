@@ -37,6 +37,7 @@ from collections import deque
 
 SPARK = "▁▂▃▄▅▆▇█"
 HIST = 40
+WINDOW = 30.0  # seconds of history behind every rate the dash shows
 
 
 def palette(enabled: bool) -> dict:
@@ -155,6 +156,12 @@ ACC_TOK = "vllm:spec_decode_num_accepted_tokens_total"
 CACHE_Q = "vllm:prefix_cache_queries_total"
 CACHE_H = "vllm:prefix_cache_hits_total"
 ITL_SUM = "vllm:inter_token_latency_seconds_sum"
+QUEUE_SUM = "vllm:request_queue_time_seconds_sum"
+QUEUE_CNT = "vllm:request_queue_time_seconds_count"
+PREF_SUM = "vllm:request_prefill_time_seconds_sum"
+PREF_CNT = "vllm:request_prefill_time_seconds_count"
+DEC_SUM = "vllm:request_decode_time_seconds_sum"
+DEC_CNT = "vllm:request_decode_time_seconds_count"
 
 
 class RateWindow:
@@ -163,7 +170,7 @@ class RateWindow:
     dividing the counter delta over the whole window span tracks the real
     trend. A counter that goes backwards (server restart) resets the window."""
 
-    def __init__(self, span: float = 30.0) -> None:
+    def __init__(self, span: float = WINDOW) -> None:
         self.span = span
         self.samples: deque = deque()
 
@@ -215,7 +222,7 @@ def render(target: str, m: dict, prev: dict | None, dt: float,
            hist_pre: deque, hist_dec: deque, up_s: float, c: dict,
            info: dict | None = None, width: int | None = None,
            wins: dict | None = None, avgs: tuple | None = None,
-           session: tuple | None = None) -> str:
+           session: tuple | None = None, busy: float | None = None) -> str:
     def rate(name: str) -> float:
         if prev is None or dt <= 0:
             return 0.0
@@ -299,9 +306,24 @@ def render(target: str, m: dict, prev: dict | None, dt: float,
     else:
         wait_txt = f"{int(waiting)}"
     per_req = f"  {c['d']}decode {fmt_rate(dec / running)} tok/s/req{c['r']}" if running > 0 else ""
-    L.append(f"  {c['d']}requests{c['r']}   running {int(running)}  waiting {wait_txt}{per_req}")
+    busy_txt = f"  {c['d']}engine busy {busy * 100:.0f}%{c['r']}" if busy is not None else ""
+    L.append(f"  {c['d']}requests{c['r']}   running {int(running)}  waiting {wait_txt}{per_req}{busy_txt}")
     L.append(f"  {c['d']}kv cache{c['r']}   {gauge(c, kv)} used    {c['d']}prefix hit{c['r']} {c['green']}{hit_rate:.0f}%{c['r']}")
     L.append(f"  {c['d']}ttft{c['r']}       {ttft_win:.1f}s recent   {c['d']}{ttft_avg:.1f}s lifetime (incl. queue wait){c['r']}")
+
+    def phase(sum_name: str, cnt_name: str) -> float | None:
+        """Mean seconds a request spends in one phase, over the window."""
+        if wins:
+            sr, cr = wins[sum_name].rate(), wins[cnt_name].rate()
+        else:
+            sr, cr = rate(sum_name), rate(cnt_name)
+        return sr / cr if cr > 0 else None
+
+    phases = (phase(QUEUE_SUM, QUEUE_CNT), phase(PREF_SUM, PREF_CNT),
+              phase(DEC_SUM, DEC_CNT))
+    if all(p is not None for p in phases):
+        L.append(f"  {c['d']}lifecycle{c['r']}  queue {phases[0]:.1f}s → prefill {phases[1]:.1f}s"
+                 f" → decode {phases[2]:.1f}s   {c['d']}per request{c['r']}")
     if d_tot:
         L.append(f"  {c['d']}spec dec{c['r']}   accept {c['green']}{acc_rate:.0f}%{c['r']}   draft {drafts:.1f} → accepted {accepted:.1f} tok/s   {c['d']}per-pos {pos_pct}{c['r']}")
     L.append("")
@@ -360,8 +382,11 @@ def main(argv=None) -> int:
 
     hist_pre, hist_dec = deque(maxlen=HIST), deque(maxlen=HIST)
     wins = {name: RateWindow() for name in (PROMPT_TOK, GEN_TOK, DRAFT_TOK, ACC_TOK,
-                                            CACHE_Q, CACHE_H, ITL_SUM)}
+                                            CACHE_Q, CACHE_H, ITL_SUM,
+                                            QUEUE_SUM, QUEUE_CNT, PREF_SUM, PREF_CNT,
+                                            DEC_SUM, DEC_CNT)}
     first, info, info_t = None, {}, 0.0
+    run_hist: deque = deque()  # (t, running) gauge samples for engine busy%
     prev, prev_t, t0 = None, 0.0, time.monotonic()
     while True:
         try:
@@ -388,9 +413,18 @@ def main(argv=None) -> int:
             avgs = (max(0.0, (g(m, PROMPT_TOK) - g(first, PROMPT_TOK)) / elapsed),
                     max(0.0, (g(m, GEN_TOK) - g(first, GEN_TOK)) / elapsed))
         width = shutil.get_terminal_size().columns if terminal else None
+        run_hist.append((now, g(m, "vllm:num_requests_running")))
+        while len(run_hist) > 2 and run_hist[0][0] < now - WINDOW:
+            run_hist.popleft()
+        busy = None
+        if len(run_hist) > 1:
+            items = list(run_hist)
+            tot = sum(tb - ta for (ta, _), (tb, _) in zip(items, items[1:]))
+            busy_t = sum(tb - ta for (ta, ra), (tb, _) in zip(items, items[1:]) if ra > 0)
+            busy = busy_t / tot if tot > 0 else None
         out = render(args.url, m, prev, now - prev_t, hist_pre, hist_dec, now - t0, c,
                      info=info, width=width, wins=wins, avgs=avgs,
-                     session=(g(first, PROMPT_TOK), g(first, GEN_TOK)))
+                     session=(g(first, PROMPT_TOK), g(first, GEN_TOK)), busy=busy)
         if args.once:
             print(out)
             return 0

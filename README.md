@@ -445,6 +445,56 @@ verified against their pinned checkpoint revisions.
   ships the bottom rung), benign-holdout 32/32 every arm, α=0 no-op
   byte-exact, zero garbles. Same unsloth-mirror base pin; apply with `glp.py`
   / `apply_transformers.py`.
+- [`msuiche/gemma-4-E2B-it-abliterated-GLP-31-L4-34-a0.5`](https://huggingface.co/msuiche/gemma-4-E2B-it-abliterated-GLP-31-L4-34-a0.5)
+  — **Gemma-4 E2B (`gemma4` multimodal), GLP-31.** Post-layer residual
+  stream (1536), layers 4–34 zero-based (contiguous), α=0.5. Derived
+  2026-10-11 on Modal (A10G, transformers 5.19.0 capture lane) from
+  canonical `google/gemma-4-E2B-it` — unlike gemma-3, the gemma-4 google/
+  repos serve weights to our token, so no mirror; the google/ revision sha
+  is the pin in `glp.base_revision`. Stock refuses hard — 4/32 comply on
+  refusal32 — and the ladder is monotone (28 → 31 → 32), so the vector does
+  real unlocking: 31/32 at the shipped α=0.5 with benign-holdout 32/32 at
+  every rung, a byte-exact α=0 no-op and zero garbles. No serving lane —
+  apply with `glp.py` or `tools/captain-vector/apply_transformers.py`.
+- [`msuiche/gemma-4-E4B-it-abliterated-GLP-33-L5-41-a1`](https://huggingface.co/msuiche/gemma-4-E4B-it-abliterated-GLP-33-L5-41-a1)
+  — **Gemma-4 E4B (`gemma4` multimodal), GLP-33.** Post-layer residual
+  stream (2560), layers 5, 10–41 zero-based — the null gate dropped 6–9, so
+  the span genuinely carries a gap — α=1.0. The family's hardest refuser:
+  stock refuses 31/32 on refusal32 (the lone "comply" is a scorer artifact)
+  and the ladder is the steepest (15 → 25 → 32), so the knee rule climbs
+  past 0.5 and ships full α — 32/32 steered with benign-holdout 32/32 at
+  every rung, α=0 no-op byte-exact, zero garbles. Same canonical google/
+  base pin; apply with `glp.py` / `apply_transformers.py`.
+- [`msuiche/gemma-4-12B-it-abliterated-GLP-33-L15-47-a0.5`](https://huggingface.co/msuiche/gemma-4-12B-it-abliterated-GLP-33-L15-47-a0.5)
+  — **Gemma-4 12B (`gemma4_unified`), GLP-33.** Post-layer residual stream
+  (3840), layers 15–47 zero-based (contiguous), α=0.5. The unified arch:
+  vision/audio embedders into the shared text stack, no towers (the four
+  siblings are plain `gemma4` with real towers + PLE; both nest the steered
+  stack at `model.language_model.layers`). Stock already complies 32/32 on
+  refusal32, so this ladder is the no-regression story — and it is
+  non-monotone: α=0.25 dips to 29/32, α=0.5 and 1.0 hold 32/32 with
+  benign-holdout 32/32 every arm, α=0 no-op byte-exact, zero garbles. Same
+  canonical google/ base pin; apply with `glp.py` / `apply_transformers.py`.
+- [`msuiche/gemma-4-26B-A4B-it-abliterated-GLP-27-L3-29-a0.5`](https://huggingface.co/msuiche/gemma-4-26B-A4B-it-abliterated-GLP-27-L3-29-a0.5)
+  — **Gemma-4 26B-A4B (`gemma4` multimodal, MoE), GLP-27.** Post-layer
+  residual stream (2816), layers 3–29 zero-based (contiguous), α=0.5. The
+  first MoE derivation in the gemma line: 128 experts top-8 summed with a
+  dense MLP per hybrid layer (~26B total / ~4B active) — the hook sits on
+  the decoder-layer output downstream of router+experts, and direction
+  quality matches the dense 12B (span min cos 0.575 vs 0.559). Stock
+  complies 32/32; the ladder dips to 25/32 at α=0.25 and recovers to 31/32
+  at the shipped α=0.5 (α=1.0 flips two benign-holdout prompts and fails
+  that gate), benign-holdout 32/32 at the shipped rung, α=0 no-op
+  byte-exact, zero garbles. Same canonical google/ base pin; apply with
+  `glp.py` / `apply_transformers.py`.
+- [`msuiche/gemma-4-31B-it-abliterated-GLP-54-L6-59-a0.5`](https://huggingface.co/msuiche/gemma-4-31B-it-abliterated-GLP-54-L6-59-a0.5)
+  — **Gemma-4 31B (`gemma4` multimodal), GLP-54.** Post-layer residual
+  stream (5376), layers 6–59 zero-based (contiguous), α=0.5. The dense
+  flagship (60L, vision/audio towers + PLE). Stock complies 32/32 on
+  refusal32; the shallowest non-monotone dip of the family — α=0.25 gives
+  30/32, α=0.5 holds 32/32, α=1.0 re-engages one refusal — benign-holdout
+  32/32 at every rung, α=0 no-op byte-exact, zero garbles. Same canonical
+  google/ base pin; apply with `glp.py` / `apply_transformers.py`.
 
 ## Roadmap
 

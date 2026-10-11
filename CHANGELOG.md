@@ -7,6 +7,45 @@ live in `BENCHMARK.md`; this file tracks what shipped.
 ## 2026-10-11
 
 ### Added
+- **Gemma-4 family GLP vectors shipped — five repos, the first MoE
+  derivation in the gemma line, and the family's first canonical-base
+  pins.** All `residual_stream_post_layer`, all derived 2026-10-11 on Modal
+  from the canonical `google/gemma-4-*-it` repos — unlike gemma-3, the
+  gemma-4 google/ repos serve weights to our token, so there is no unsloth
+  mirror and the google/ revision sha is the pin in `glp.base_revision` — on
+  transformers **5.19.0** (gemma4/gemma4_unified first appear in stable
+  5.17.0):
+  [`msuiche/gemma-4-E2B-it-abliterated-GLP-31-L4-34-a0.5`](https://huggingface.co/msuiche/gemma-4-E2B-it-abliterated-GLP-31-L4-34-a0.5)
+  (31 directions, L4–34 contiguous, α=0.5),
+  [`msuiche/gemma-4-E4B-it-abliterated-GLP-33-L5-41-a1`](https://huggingface.co/msuiche/gemma-4-E4B-it-abliterated-GLP-33-L5-41-a1)
+  (33 directions, L5 + 10–41 — 6–9 dropped by the null gate, so the span is
+  non-contiguous — α=1.0),
+  [`msuiche/gemma-4-12B-it-abliterated-GLP-33-L15-47-a0.5`](https://huggingface.co/msuiche/gemma-4-12B-it-abliterated-GLP-33-L15-47-a0.5)
+  (33 directions, L15–47, α=0.5),
+  [`msuiche/gemma-4-26B-A4B-it-abliterated-GLP-27-L3-29-a0.5`](https://huggingface.co/msuiche/gemma-4-26B-A4B-it-abliterated-GLP-27-L3-29-a0.5)
+  (27 directions, L3–29, α=0.5 — the family MoE: 128 experts top-8 summed
+  with a dense MLP per hybrid layer, ~26B total / ~4B active; the post-layer
+  hook sits downstream of router+experts, so capture needed zero
+  MoE-specific handling),
+  [`msuiche/gemma-4-31B-it-abliterated-GLP-54-L6-59-a0.5`](https://huggingface.co/msuiche/gemma-4-31B-it-abliterated-GLP-54-L6-59-a0.5)
+  (54 directions, L6–59, α=0.5). Two archs in one family, one asserted layer
+  path: the 12B is `gemma4_unified` (embedder multimodal — vision/audio
+  embedders into the shared text stack, no towers), the other four are plain
+  `gemma4` (`Gemma4ForConditionalGeneration`, real vision/audio towers +
+  PLE); both nest the steered text stack at `model.language_model.layers`.
+  Gates green on all five: α=0 no-op byte-exact 64/64, zero garbled at every
+  α, `validate_gguf` clean, post-push sha256 byte-identity verified. The
+  behavioral split is the honest story: the edge pair refuses hard stock
+  (E2B complies 4/32 on refusal32; E4B effectively 0/32 — its lone "comply"
+  is a scorer artifact) and the vectors move them to 31/32 and 32/32, while
+  12B/26B-A4B/31B already comply 32/32 unsteered, so their ladders carry the
+  no-regression/no-op evidence instead — and three of the five ladders are
+  non-monotone (α=0.25 dips below stock). The family's knee-α spread
+  {gemma-3: 0.25 flat, E2B: 0.5, E4B: 1.0, 12B/26B-A4B/31B: 0.5} is measured
+  evidence for the FAQ's standing caveat: calibrate α per model, never scale
+  it across models. No `setup.py` wizard lanes (same reasoning as the
+  gemma-3 ship) — apply with `glp.py` or
+  `tools/captain-vector/apply_transformers.py`.
 - **Gemma-3 family GLP vectors shipped — the first Google-family files, and
   the first multimodal-arch derivations** (4B/12B/27B are
   `Gemma3ForConditionalGeneration`; the pipeline resolves the text stack at

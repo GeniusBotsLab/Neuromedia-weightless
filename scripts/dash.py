@@ -382,9 +382,11 @@ def main(argv=None) -> int:
 
     hist_pre, hist_dec = deque(maxlen=HIST), deque(maxlen=HIST)
     wins = {name: RateWindow() for name in (PROMPT_TOK, GEN_TOK, DRAFT_TOK, ACC_TOK,
-                                            CACHE_Q, CACHE_H, ITL_SUM,
-                                            QUEUE_SUM, QUEUE_CNT, PREF_SUM, PREF_CNT,
-                                            DEC_SUM, DEC_CNT)}
+                                            CACHE_Q, CACHE_H, ITL_SUM)}
+    # Phase histograms only record on request completion; long generations
+    # leave a 30s window empty. Give lifecycle stats a longer memory.
+    for name in (QUEUE_SUM, QUEUE_CNT, PREF_SUM, PREF_CNT, DEC_SUM, DEC_CNT):
+        wins[name] = RateWindow(span=300.0)
     first, info, info_t = None, {}, 0.0
     run_hist: deque = deque()  # (t, running) gauge samples for engine busy%
     prev, prev_t, t0 = None, 0.0, time.monotonic()

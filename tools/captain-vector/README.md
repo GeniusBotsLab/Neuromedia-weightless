@@ -150,6 +150,10 @@ sections it builds on) and are required practice, not suggestions.
 - `apply_transformers.py` — experiment-time helper: applies a GLP GGUF to any
   HF decoder model via forward hooks (torch only, transformers not imported)
 - `calibrate_null.py` — measures what held/null ratio pure noise reaches
+- `publish_hf.py` — ship helper: creates the HF repo (public, `gated="auto"`,
+  RUA checkbox via the card's `extra_gated_*` frontmatter), uploads card +
+  GGUF, then re-downloads the file and asserts sha256 byte-identity (stdlib +
+  `huggingface_hub`; the 2026-10-11 Gemma-3 family ship used it)
 - `test_captain_vector.py` — self-test script; also runs in `../../tests/`
 - `examples/` — a form-matched, benign prompt-pair template;
   `examples/peft_merge.py` loads a baked adapter with peft (attach, with/without

@@ -413,6 +413,38 @@ verified against their pinned checkpoint revisions.
   makes it WORSE at full length** (do not raise it). Serving lane:
   `recipe/glm53xl/` (TP=4 on 4x Spark, tonyd2wild's Int4-Int8Mix stack; the
   hotfix steers `hidden_states + residual` on the `deepseek_v2` path).
+- [`msuiche/gemma-3-1b-it-abliterated-GLP-20-L4-25-a0.25`](https://huggingface.co/msuiche/gemma-3-1b-it-abliterated-GLP-20-L4-25-a0.25)
+  — **Gemma-3 1B (`gemma3_text`), GLP-20.** Per-layer dom over the post-layer
+  residual stream (1152), layers 4, 5, 8–25 zero-based — the null gate
+  dropped 6 and 7, so the span genuinely carries gaps — α=0.25. First
+  Google-family vector. Derived 2026-10-11 on Modal (A10G, transformers
+  capture lane) from the byte-identical `unsloth/gemma-3-1b-it` mirror — the
+  `google/` repo is license-gated for our token, so the mirror revision is
+  the pin in `glp.base_revision`. Stock already complies 29/32 on refusal32;
+  the vector closes the last 3 with benign-holdout 32/32 at every rung, a
+  byte-exact α=0 no-op and zero garbles. No serving lane — apply with
+  `glp.py` or `tools/captain-vector/apply_transformers.py`.
+- [`msuiche/gemma-3-4b-it-abliterated-GLP-28-L6-33-a0.25`](https://huggingface.co/msuiche/gemma-3-4b-it-abliterated-GLP-28-L6-33-a0.25)
+  — **Gemma-3 4B (`gemma3` multimodal), GLP-28.** Same recipe over the
+  post-layer residual stream (2560), layers 6–33 zero-based (contiguous),
+  α=0.25. First multimodal-arch derivation: the checkpoint is
+  `Gemma3ForConditionalGeneration` and the steered text stack resolves at
+  `model.language_model.layers`. Stock refusal32 30/32 → 32/32 at α=0.25,
+  benign-holdout 32/32 every arm, α=0 no-op byte-exact, zero garbles. Same
+  unsloth-mirror base pin; apply with `glp.py` / `apply_transformers.py`.
+- [`msuiche/gemma-3-12b-it-abliterated-GLP-43-L5-47-a0.25`](https://huggingface.co/msuiche/gemma-3-12b-it-abliterated-GLP-43-L5-47-a0.25)
+  — **Gemma-3 12B (`gemma3` multimodal), GLP-43.** Post-layer residual stream
+  (3840), layers 5–47 zero-based (contiguous), α=0.25. Stock refusal32 30/32
+  → 32/32 at α=0.25, benign-holdout 32/32 every arm, α=0 no-op byte-exact,
+  zero garbles. Same unsloth-mirror base pin; apply with `glp.py` /
+  `apply_transformers.py`.
+- [`msuiche/gemma-3-27b-it-abliterated-GLP-51-L11-61-a0.25`](https://huggingface.co/msuiche/gemma-3-27b-it-abliterated-GLP-51-L11-61-a0.25)
+  — **Gemma-3 27B (`gemma3` multimodal), GLP-51.** Post-layer residual stream
+  (5376), layers 11–61 zero-based (contiguous), α=0.25. Stock refusal32
+  29/32 → 31/32 at the shipped α=0.25 (32/32 from α=0.5 up — the knee rule
+  ships the bottom rung), benign-holdout 32/32 every arm, α=0 no-op
+  byte-exact, zero garbles. Same unsloth-mirror base pin; apply with `glp.py`
+  / `apply_transformers.py`.
 
 ## Roadmap
 

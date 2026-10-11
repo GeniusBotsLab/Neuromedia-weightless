@@ -4,6 +4,38 @@ Date-based sections — the repo has no versioned releases yet; captain-vector
 carries its own version numbers. Newest first. Steering-effectiveness numbers
 live in `BENCHMARK.md`; this file tracks what shipped.
 
+## 2026-10-11
+
+### Added
+- **Gemma-3 family GLP vectors shipped — the first Google-family files, and
+  the first multimodal-arch derivations** (4B/12B/27B are
+  `Gemma3ForConditionalGeneration`; the pipeline resolves the text stack at
+  `model.language_model.layers`). Four repos, all
+  `residual_stream_post_layer`, all α=0.25 (flat α ladders — the knee rule
+  ships the bottom rung):
+  [`msuiche/gemma-3-1b-it-abliterated-GLP-20-L4-25-a0.25`](https://huggingface.co/msuiche/gemma-3-1b-it-abliterated-GLP-20-L4-25-a0.25)
+  (20 directions, L4–25 — 6 and 7 dropped by the null gate, so the span is
+  non-contiguous),
+  [`msuiche/gemma-3-4b-it-abliterated-GLP-28-L6-33-a0.25`](https://huggingface.co/msuiche/gemma-3-4b-it-abliterated-GLP-28-L6-33-a0.25)
+  (28 directions, L6–33),
+  [`msuiche/gemma-3-12b-it-abliterated-GLP-43-L5-47-a0.25`](https://huggingface.co/msuiche/gemma-3-12b-it-abliterated-GLP-43-L5-47-a0.25)
+  (43 directions, L5–47),
+  [`msuiche/gemma-3-27b-it-abliterated-GLP-51-L11-61-a0.25`](https://huggingface.co/msuiche/gemma-3-27b-it-abliterated-GLP-51-L11-61-a0.25)
+  (51 directions, L11–61). Gates green on all four: stock refusal32 29–30/32
+  → steered 32/32, benign-holdout 32/32 on every arm, α=0 no-op byte-exact,
+  zero garbled, `validate_gguf` clean, post-push sha256 byte-identity
+  verified. Bases are the `unsloth/gemma-3-*-it` mirrors (byte-identical
+  bf16 — the `google/` repos are license-gated for our token); the mirror
+  revision sha is the pin in `glp.base_revision`. No `setup.py` wizard lanes:
+  lanes there are serving recipes (docker image + env + fail-closed hotfix)
+  and these four ship as downloads — apply with `glp.py` or
+  `tools/captain-vector/apply_transformers.py`.
+- **`captain-vector publish_hf.py`** (`tools/captain-vector/`) — the ship
+  helper used for all four Gemma repos: create_repo (public), `gated="auto"`
+  (the RUA checkbox lives in the card's `extra_gated_*` frontmatter), card +
+  GGUF upload, then a re-download sha256 byte-identity assert. Stdlib +
+  `huggingface_hub` only.
+
 ## 2026-10-07
 
 ### Added

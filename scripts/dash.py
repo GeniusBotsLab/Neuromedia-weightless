@@ -154,6 +154,8 @@ DRAFT_TOK = "vllm:spec_decode_num_draft_tokens_total"
 ACC_TOK = "vllm:spec_decode_num_accepted_tokens_total"
 CACHE_Q = "vllm:prefix_cache_queries_total"
 CACHE_H = "vllm:prefix_cache_hits_total"
+ITL_COUNT = "vllm:inter_token_latency_seconds_count"
+ITL_SUM = "vllm:inter_token_latency_seconds_sum"
 
 
 class RateWindow:
@@ -282,9 +284,13 @@ def render(target: str, m: dict, prev: dict | None, dt: float,
     avg_dec = f"  {c['d']}avg {fmt_rate(avgs[1])}{c['r']}" if avgs else ""
     fresh = (f"  {c['d']}fresh {fmt_rate(fresh_pre)}{c['r']}"
              if g(m, CACHE_Q) > 0 else "")
+    # Duty-cycle-free decode speed: tokens per second experienced by a
+    # request while it is actually decoding (inter-token latency inverted).
+    itl_n, itl_s = stable(ITL_COUNT), stable(ITL_SUM)
+    stream = f"  {c['d']}stream {fmt_rate(itl_n / itl_s)}/req{c['r']}" if itl_s > 0 else ""
     L.append(f"  {c['cyan']}prefill{c['r']} {c['b']}{fmt_rate(pre):>7}{c['r']} tok/s{avg_pre}{fresh}"
              f"  {c['cyan']}{spark(hist_pre, spark_w)}{c['r']}")
-    L.append(f"  {c['pink']}decode {c['r']} {c['b']}{fmt_rate(dec):>7}{c['r']} tok/s{avg_dec}"
+    L.append(f"  {c['pink']}decode {c['r']} {c['b']}{fmt_rate(dec):>7}{c['r']} tok/s{avg_dec}{stream}"
              f"  {c['pink']}{spark(hist_dec, spark_w)}{c['r']}")
     L.append("")
     if waiting > 0:
@@ -353,7 +359,7 @@ def main(argv=None) -> int:
 
     hist_pre, hist_dec = deque(maxlen=HIST), deque(maxlen=HIST)
     wins = {name: RateWindow() for name in (PROMPT_TOK, GEN_TOK, DRAFT_TOK, ACC_TOK,
-                                            CACHE_Q, CACHE_H)}
+                                            CACHE_Q, CACHE_H, ITL_COUNT, ITL_SUM)}
     first, info, info_t = None, {}, 0.0
     prev, prev_t, t0 = None, 0.0, time.monotonic()
     while True:

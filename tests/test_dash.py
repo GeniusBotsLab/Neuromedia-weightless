@@ -257,5 +257,20 @@ class RenderContextTests(unittest.TestCase):
         self.assertNotIn("fresh", out)
 
 
+    def test_decode_shows_stream_rate_from_itl(self):
+        prev = {"vllm:inter_token_latency_seconds_count": 0.0,
+                "vllm:inter_token_latency_seconds_sum": 0.0}
+        m = {"vllm:inter_token_latency_seconds_count": 100.0,
+             "vllm:inter_token_latency_seconds_sum": 2.0}  # 20 ms ITL -> 50 tok/s
+        out = dash.render("http://lane", m, prev, 1.0, deque(), deque(), 0.0,
+                          dash.palette(False))
+        self.assertIn("stream 50.0/req", out)
+
+    def test_stream_hidden_without_itl_metrics(self):
+        out = dash.render("http://lane", {"vllm:num_requests_running": 1.0}, None, 1.0,
+                          deque(), deque(), 0.0, dash.palette(False))
+        self.assertNotIn("stream", out)
+
+
 if __name__ == "__main__":
     unittest.main()

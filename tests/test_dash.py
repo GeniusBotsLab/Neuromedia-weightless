@@ -258,10 +258,10 @@ class RenderContextTests(unittest.TestCase):
 
 
     def test_decode_shows_stream_rate_from_itl(self):
-        prev = {"vllm:inter_token_latency_seconds_count": 0.0,
+        prev = {"vllm:generation_tokens_total": 0.0,
                 "vllm:inter_token_latency_seconds_sum": 0.0}
-        m = {"vllm:inter_token_latency_seconds_count": 100.0,
-             "vllm:inter_token_latency_seconds_sum": 2.0}  # 20 ms ITL -> 50 tok/s
+        m = {"vllm:generation_tokens_total": 100.0,
+             "vllm:inter_token_latency_seconds_sum": 2.0}  # 100 tok in 2s decode time
         out = dash.render("http://lane", m, prev, 1.0, deque(), deque(), 0.0,
                           dash.palette(False))
         self.assertIn("stream 50.0/req", out)

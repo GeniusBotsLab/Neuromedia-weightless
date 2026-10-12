@@ -4,6 +4,39 @@ Date-based sections — the repo has no versioned releases yet; captain-vector
 carries its own version numbers. Newest first. Steering-effectiveness numbers
 live in `BENCHMARK.md`; this file tracks what shipped.
 
+## 2026-10-12
+
+### Added
+- **Lane watchdog: the container-level self-healing gap is closed**
+  (`scripts/lane_watchdog.py`). The 2026-10-01 wedge class — GPU work hangs,
+  every rank exits 0, the OS stays healthy, and the hardware watchdog,
+  panic sysctls, and docker restart policies all stay silent — finally has a
+  guard: a cron probe of the current lane's `/v1/models` every 5 min, three
+  consecutive failures relaunch the lane through its start script (never
+  `docker start` — RoCE GID indices re-resolve at launch). Boot-grace state
+  keeps the 20–40-min boot from stacking relaunches; a switch lock
+  (`~/.cache/weightless/lane-switch.lock`, touched by `serve`, cleared on
+  success) keeps it from firing mid-switch. `--install` stages the watchdog
+  plus the versioned `scripts/lane-autostart.sh` (@reboot hook) into
+  `~/.local/bin` and arms both cron lines, idempotently; any successful
+  `weightless.py serve` also publishes `~/current-lane` and re-arms the
+  watchdog on the head as a deploy step. First live instance it would have
+  caught: 2026-10-12 10:15, `EngineDeadError` under load stopped the
+  glm53tp4 lane and it sat unserved ~5h until a human noticed.
+- **dash: the full duty-cycle picture.** `stream N/req` (output tokens per
+  second of decode time — immune to idle gaps and to the fork's per-step
+  ITL histogram), `lifecycle queue → prefill → decode` per-request phase
+  means (5-min window: phase histograms only record on completion),
+  `engine busy N%`, fresh-vs-cached prefill split (`fresh N` next to the
+  total — `prompt_tokens_total` counts prefix-cache hits), per-request
+  decode, session token deltas (`this dash: +X prompt +Y gen`), 30s
+  sliding-window rates with restart-safe counter handling, humanized
+  counters, ANSI-aware width clipping, and a lane line with served model /
+  context / engine version.
+- **weightless.py task** — token/time usage of an omp agent session from
+  its journal: elapsed, model calls, fresh input vs output, prefix-cache
+  reads/writes, live context size (`scripts/task.py`).
+
 ## 2026-10-11
 
 ### Added

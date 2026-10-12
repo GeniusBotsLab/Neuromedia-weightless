@@ -103,6 +103,7 @@ LANES = [
                        "start-deepseek-v4-flash-dspark.sh"],
          start_script="start-deepseek-v4-flash-dspark.sh",
          hotfix="hotfix-dsv4-steering-projective.py",
+         watch_key="dsv4",
          port=8888),
     dict(name="Qwen TP=1 serving — single DGX Spark",
          example="recipe/qwen/.env.qwen.example",
@@ -347,6 +348,7 @@ LANES = [
                        "start-dsv4-vl-dspark.sh"],
          start_script="start-dsv4-vl-dspark.sh",
          hotfix="hotfix-dsv4vl-steering-projective.py",
+         watch_key="dsv4vl",
          port=8888),
 ]
 PLACEHOLDER_HINTS = {
@@ -2175,7 +2177,24 @@ def _node_container_names(values, ssh_host, worker=None):
     return [n.strip() for n in r.stdout.splitlines() if n.strip()]
 
 
-def configure_serve_clients(io, base, model, values=None, ssh_host=None):
+def install_watchdog_remote(values, ssh_host):
+    """Stage the lane watchdog + reboot hook on the head and arm their cron
+    lines (idempotent, no sudo). Deploy-time equivalent of harden_steps for
+    the application-wedge failure class (TROUBLESHOOTING.md item 0)."""
+    import base64
+    staged = []
+    for name in ("lane_watchdog.py", "lane-autostart.sh"):
+        with open(os.path.join(HERE, "scripts", name), "rb") as fh:
+            payload = base64.b64encode(fh.read()).decode()
+        dest = "weightless-lane-watchdog.py" if name.endswith(".py") else name
+        staged.append(f"echo {payload} | base64 -d > ~/.local/bin/{dest}")
+    cmd = ("mkdir -p ~/.local/bin && " + " && ".join(staged)
+           + " && chmod +x ~/.local/bin/weightless-lane-watchdog.py ~/.local/bin/lane-autostart.sh"
+           + " && python3 ~/.local/bin/weightless-lane-watchdog.py --install")
+    return subprocess.call(node_command(values, ssh_host, cmd))
+
+
+def configure_serve_clients(io, base, model, values=None, ssh_host=None, lane_key=None):
     """Point the agent clients at what a `serve` switch just made live.
 
     The wizard's interactive agent-setup step does this with confirmations;
@@ -2185,7 +2204,9 @@ def configure_serve_clients(io, base, model, values=None, ssh_host=None):
     URL, context length) on this machine, plus the hermes config ON THE
     HEAD NODE when one exists there (the user's hermes runs on the rig:
     update model.default + context_length remotely, preserving the head's
-    own base_url — it may point at the local router, not the vLLM port)."""
+    own base_url — it may point at the local router, not the vLLM port).
+    With lane_key, also closes the self-healing loop on the head: publishes
+    ~/current-lane, clears the switch lock, and arms the lane watchdog."""
     host = urllib.parse.urlparse(base).hostname or "localhost"
     context_length = served_context(base, model)
     try:
@@ -2215,6 +2236,22 @@ def configure_serve_clients(io, base, model, values=None, ssh_host=None):
             io.ok(f"hermes on {ssh_host} set to {model} ({context_length:,} ctx)")
         else:
             io.warn(f"hermes config on {ssh_host} not updated")
+    if values and ssh_host:
+        # Close the self-healing loop: publish which lane is live, clear the
+        # switch suppression, arm the watchdog. Best-effort, like the clients.
+        steps = []
+        if lane_key:
+            steps.append(f"echo {lane_key} > ~/current-lane")
+        steps.append("rm -f ~/.cache/weightless/lane-switch.lock")
+        if subprocess.call(node_command(values, ssh_host,
+                                        "mkdir -p ~/.cache/weightless && "
+                                        + " && ".join(steps))) != 0:
+            io.warn("current-lane / switch-lock update failed on the head")
+        try:
+            if install_watchdog_remote(values, ssh_host) == 0:
+                io.ok(f"lane watchdog armed on {ssh_host}")
+        except Exception as exc:
+            io.warn(f"lane watchdog install skipped: {exc}")
 
 
 def quick_serve_cloud(io, lane_idx):
@@ -2362,7 +2399,8 @@ def quick_serve(io, lane_arg, skip_assets=False, skip_wait=False):
                 if ids and (not want or want in ids):
                     io.ok(f"lane {lane_idx} is already serving {want or ids[0]} "
                           f"on {base} — refreshing client configs")
-                    configure_serve_clients(io, base, want or ids[0], values, ssh_host)
+                    configure_serve_clients(io, base, want or ids[0], values, ssh_host,
+                                            lane_key=lane.get("watch_key"))
                     return 0
                 # A crash-looping container still appears in docker ps; a
                 # name match without a live endpoint is not "serving".
@@ -2381,6 +2419,11 @@ def quick_serve(io, lane_arg, skip_assets=False, skip_wait=False):
                 if any(stack["match"] in n for n in names_by_node[w])]
         if hits:
             external.append(stack)
+    # Stand the lane watchdog down before the old endpoint dies: a serve
+    # switch is deliberate, not a wedge. Cleared in configure_serve_clients.
+    subprocess.call(node_command(values, ssh_host,
+                                 "mkdir -p ~/.cache/weightless && "
+                                 "touch ~/.cache/weightless/lane-switch.lock"))
     for desc, argv in parks:
         io.info("park: " + desc)
         if subprocess.call(argv) != 0:
@@ -2437,7 +2480,8 @@ def quick_serve(io, lane_arg, skip_assets=False, skip_wait=False):
         ids, _ = probe_models(base)
         if ids and (not want or want in ids):
             io.ok(f"serving {want or ids[0]} on {base}")
-            configure_serve_clients(io, base, want or ids[0], values, ssh_host)
+            configure_serve_clients(io, base, want or ids[0], values, ssh_host,
+                                    lane_key=lane.get("watch_key"))
             return 0
         time.sleep(20)
     io.err(f"endpoint did not come up within 45 min — diagnose: setup.py (Endpoint)")
